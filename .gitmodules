@@ -1,0 +1,6 @@
+[submodule "picoquic"]
+	path = picoquic
+	url = https://github.com/karen07/picoquic.git
+[submodule "picotls"]
+	path = picotls
+	url = https://github.com/karen07/picotls.git
