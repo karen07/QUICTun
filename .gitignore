@@ -1,0 +1,9 @@
+# CMake
+build/
+certs/
+configs/
+log/
+wgs/
+systemd/
+test_client_cert_four_phases/
+test_config_validation/
