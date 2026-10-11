@@ -480,7 +480,7 @@ sendto_quic_*
 
 ## systemd
 
-Генератор systemd unit файлов создает:
+При ручной настройке systemd можно создать unit-файлы:
 
 ```text
 QUICTun-server.service
@@ -502,57 +502,6 @@ QUICTun-client2.service
 
 Units зависят от `network-online.target` и могут иметь связи с `wg-quick@...`.
 
-## Генераторы
-
-В каталоге `shs/` лежат вспомогательные shell скрипты.
-
-### certs.sh
-
-Создает CA, серверный сертификат и клиентские сертификаты:
-
-```text
-certs/ca/ca.key
-certs/ca/ca.pem
-certs/server/cert.pem
-certs/server/cert.key
-certs/server/ca.pem
-certs/clientN/cert.pem
-certs/clientN/cert.key
-certs/clientN/ca.pem
-```
-
-CA использует ED25519.
-
-### configs.sh
-
-Создает QUICTun конфиги:
-
-```text
-configs/server.conf
-configs/client1.conf
-configs/client2.conf
-```
-
-Серверный конфиг получает `[Peer]` секции. Значение `PeerCertSHA256` берется из клиентских сертификатов.
-
-### wgs.sh
-
-Создает WireGuard конфиги:
-
-```text
-wgs/serverN.conf
-wgs/clientN.conf
-wgs/openwrt-clientN.uci
-```
-
-### systemds.sh
-
-Создает systemd unit файлы для сервера и клиентов в каталоге:
-
-```text
-systemd/
-```
-
 ## Структура проекта
 
 ```text
@@ -561,20 +510,24 @@ systemd/
 |-- CMakePresets.json
 |-- LICENSE
 |-- README.md
-|-- deploy.sh
-|-- deploy-all.sh
 |-- picoquic
 |-- picotls
-|-- shs
-|   |-- certs.sh
-|   |-- configs.sh
-|   |-- systemds.sh
-|   `-- wgs.sh
 |-- src
 |   |-- QUICTun.c
 |   `-- errno_names.c
-|-- test_config_validation.py
-`-- test_success_e2e.py
+`-- tests
+    |-- integration
+    |   |-- Dockerfile
+    |   |-- run.sh
+    |   `-- test_quictun.py
+    |-- load
+    |   |-- Dockerfile
+    |   |-- run.sh
+    |   `-- test_load.py
+    `-- unit
+        |-- run.sh
+        |-- test_core.c
+        `-- test_install.py
 ```
 
 Основные файлы:
@@ -585,14 +538,7 @@ systemd/
 | `src/errno_names.c` | Вспомогательный вывод errno names. |
 | `picoquic/` | QUIC implementation submodule. |
 | `picotls/` | TLS library submodule для picoquic. |
-| `shs/certs.sh` | Генерация CA, серверного и клиентских сертификатов. |
-| `shs/configs.sh` | Генерация QUICTun конфигов. |
-| `shs/wgs.sh` | Генерация WireGuard конфигов. |
-| `shs/systemds.sh` | Генерация systemd unit файлов. |
-| `deploy.sh` | Deploy и тестовый запуск на стенде. |
-| `deploy-all.sh` | Обертка для запуска полного deploy сценария. |
-| `test_config_validation.py` | Тесты валидации конфигов. |
-| `test_success_e2e.py` | E2E тест успешного сценария. |
+| `tests/integration/test_quictun.py` | Валидация, QUIC/UDP E2E и реальные WireGuard/network namespace тесты. |
 
 ## Сборка
 
@@ -623,26 +569,30 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-Для deploy/test может использоваться сборка с `-DDEPLOY`.
-
-Иногда в тестовом сценарии также подставляется:
-
-```text
--DMAX_CNX_TTL=<value>
--DDEPLOY
-```
-
-Установка:
+Установка только самого QUICTun (без picoquic/picotls headers, libraries и demo-программ):
 
 ```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j
 sudo cmake --install build
 ```
 
-По умолчанию install target ставит бинарник в:
+В этом примере устанавливается **только** `/usr/bin/QUICTun`. Если использовать
+CMake без `-DCMAKE_INSTALL_PREFIX=/usr`, стандартный префикс `/usr/local`
+установит бинарник в `/usr/local/bin/QUICTun`.
 
-```text
-/usr/bin
+Без root можно проверить содержимое установки в отдельном каталоге:
+
+```sh
+DESTDIR="$(mktemp -d)" cmake --install build
 ```
+
+`add_subdirectory(picoquic EXCLUDE_FROM_ALL)` оставляет picoquic доступным
+для сборки QUICTun, но не включает его собственные install-правила.
+Уже ранее установленные файлы picoquic/picotls команда `install` **не удаляет**.
+
+Форматирование исходников теперь явно запускается через `cmake --build build --target quictun-format`
+(при наличии clang-format); обычная сборка не изменяет исходные файлы.
 
 ## CMake presets
 
@@ -680,58 +630,125 @@ cmake --build --preset release
 - picoquic submodule
 - picotls submodule
 
-Для генераторов, deploy и тестового стенда также могут понадобиться:
-
-- openssl
-- wireguard-tools
-- wg
-- wg-quick
-- ssh
-- scp
-- jq
-- iperf3
-- systemctl
-- python3
-
-## Деплой и тестовый стенд
-
-`deploy.sh` предназначен для controlled deployment и тестового стенда с несколькими VM.
-
-Он может:
-
-1. собрать бинарник `QUICTun`;
-1. скопировать его на хосты в `/usr/bin/QUICTun`;
-1. скопировать QUICTun конфиги и сертификаты в `/etc/QUICTun/`;
-1. скопировать WireGuard конфиги в `/etc/wireguard/`;
-1. скопировать systemd unit файлы в `/etc/systemd/system/`;
-1. выполнить `systemctl daemon-reload`;
-1. запустить QUICTun через systemd;
-1. поднять WireGuard через зависимости `wg-quick@...`.
-
-В тестовом режиме deploy script может:
-
-- поднимать iperf3 server/client;
-- мерить upload/download;
-- делать restart сервера или клиентов;
-- собирать `journalctl`, `LogPath` и `StatPath`.
-
 ## Тесты
 
-В репозитории есть Python тесты:
-
-```text
-test_config_validation.py
-test_success_e2e.py
-```
-
-Запуск:
+Структура тестов повторяет AntiBlock: в `tests/` находятся только
+`unit/`, `integration/` и `load/`. В каждом каталоге есть независимый `run.sh`.
+Общего тестового runner или Dockerfile в корне `tests/` нет.
 
 ```sh
-python3 test_config_validation.py
-python3 test_success_e2e.py
+git submodule update --init --recursive
+
+# C unit-тесты локально: GCC Release, Clang Release и Clang ASan/UBSan
+./tests/unit/run.sh
+
+# Интеграционные E2E: собственный Dockerfile и три сборки
+./tests/integration/run.sh
+
+# Нагрузочные тесты: собственный Dockerfile и три сборки
+./tests/load/run.sh
+
+# Только CMake install-contract (без submodules)
+./tests/unit/run.sh --install-only
+
+# Сборка Docker без кэша
+INTEGRATION_NO_CACHE=1 ./tests/integration/run.sh
+LOAD_NO_CACHE=1 ./tests/load/run.sh
+
+# Более интенсивные тесты
+QUICTUN_E2E_PACKETS=512 ./tests/integration/run.sh
+QUICTUN_STRESS_SCALE=2 ./tests/load/run.sh
+QUICTUN_LONG_STRESS_PACKETS=100000 ./tests/load/run.sh
+QUICTUN_LONG_STRESS_PACKETS=500000 QUICTUN_LONG_STRESS_PPS=4000 ./tests/load/run.sh
 ```
 
-E2E тесты могут требовать подготовленный стенд, сетевые namespace, VM или доступ к хостам, в зависимости от текущей конфигурации тестового окружения.
+Для `unit/` на хосте нужны CMake, GCC, Clang, Python, OpenSSL и зависимости
+PicoQUIC/Picotls; Docker не требуется. `tests/unit/test_install.py` отдельно
+проверяет `cmake --install` с `DESTDIR` и двумя префиксами на заглушках
+зависимостей. При обычном unit-прогоне каждый профиль также проверяет установку
+с настоящими submodules: только `/usr/bin/QUICTun`.
+
+Для `integration/` и `load/` на хосте нужны Docker и инициализированные
+Git submodules. Каждая папка собирает собственный Arch Linux Docker-образ с
+GCC Release, Clang Release и Clang ASan/UBSan, затем запускает тесты в
+отдельных одноразовых контейнерах (`docker run --rm`). Если один профиль
+провалится, общий результат соответствующего набора будет FAIL.
+
+Integration-тесты требуют `NET_ADMIN`, `NET_RAW`, `SYS_ADMIN` и разрешения на
+mount/unshare для WireGuard и network namespaces, а также поддержку WireGuard
+в ядре хоста. Load-тесты запускаются без дополнительных Docker capabilities.
+
+При отладке можно передать путь к предварительно собранному бинарнику каждому
+`run.sh` как аргумент либо через `QUICTUN_BIN`/`QUICTUN_UNIT_BIN`; в этом режиме
+сборка не выполняется.
+
+`tests/integration/test_quictun.py` проверяет ошибочные конфигурации,
+QUIC-handshake, сертификаты, CA, peer hash, SNI,
+передачу UDP payload и побайтовую проверку пакетов. По умолчанию проверяются
+64 пакета разных длин; `QUICTUN_E2E_PACKETS` меняет количество (0-10000).
+
+Дополнительный integration E2E теперь создает внутри одного Docker-контейнера
+**три изолированных Linux network namespaces** и соединяет их виртуальным
+Ethernet bridge. Сервер QUICTun работает с двумя независимыми клиентами,
+используя настоящий WireGuard на каждом конце:
+
+- Отдельные клиентские TLS-сертификаты и whitelist hash для каждого peer.
+- Реальные WG interfaces: IPv4 и IPv6 пакеты в обоих направлениях.
+- Параллельные запросы через оба туннеля для проверки multi-peer демультиплексирования.
+- `iperf3` TCP/UDP через WireGuard с проверкой доставленных данных и статистики потерь.
+- Перезапуск одного клиента без остановки второго и переподключение к серверу.
+- Перезапуск QUICTun-сервера с проверкой восстановления обоих туннелей.
+- Повторный прогон WG IPv4/IPv6 поверх внешней сети QUIC IPv6.
+- `tc netem` с задержкой 25 ms и потерями 1% на подлежащем Ethernet.
+  По умолчанию сценарий обязателен: отсутствие netem завершает тест ошибкой.
+  Чтобы разрешить явный SKIP на хосте без этого qdisc, запустите с
+  `QUICTUN_REQUIRE_NETEM=0`.
+
+В этой проверке IP-пакеты **действительно проходят через WireGuard и QUICTun**,
+а не через одну loopback-сеть. Для запуска нужны Docker и поддержка WireGuard
+в ядре хоста. Санитайзеры охватывают те же сценарии под Clang ASan/UBSan.
+
+`tests/unit/test_core.c` тестирует непосредственно production C-функции:
+IPv4/IPv6 адреса, разбор строк конфигурации, маскирование/обратное
+преобразование tunnel header, отбрасывание повреждённых заголовков,
+ограничения TX-очереди и FIFO/TTL pending-пакетов. Для сборки unit-target
+нужен `-DQUICTUN_BUILD_TESTS=ON`; `quictun-unit` не устанавливается.
+
+`tests/load/test_load.py` запускает **настоящий QUICTun client/server с
+сертификатами и QUIC handshake**, затем проверяет 4 варианта передачи:
+
+1. Mixed 16/64/512/1200-byte UDP packets (1000 пакетов, 100% доставка).
+1. Sustained 1200-byte traffic (3000 пакетов, минимум 99.5% доставка).
+1. High-rate burst (4000 пакетов, минимум 98% доставка).
+1. Post-idle recovery (500 пакетов после паузы, 100% доставка).
+
+Каждый пакет имеет уникальный sequence number, сверяется побайтово, дубли
+и повреждения считаются ошибками. Скрипт выводит отправленные/полученные
+пакеты, потери, длительность и фактический packets/s. Минимальные пороги
+доставки в нагрузочных режимах учитывают UDP drops в виртуализованном
+окружении, но не допускают порчу данных. Это loopback-regression,
+**не измерение пропускной способности WireGuard через реальную сеть**.
+Переменная `QUICTUN_STRESS_SCALE` (1-10) меняет число отправленных пакетов.
+
+`QUICTUN_LONG_STRESS_PACKETS` (0-500000, default 0) включает дополнительный длительный
+stress-прогон. `QUICTUN_LONG_STRESS_PPS` (1-30000, default 4000) регулирует
+целевой темп отправки. Отчёт разделяет время отправки и полное время ожидания
+доставки. Длительный прогон выполняется во всех трёх профилях компилятора.
+
+При исчерпании UDP TX-очереди QUICTun применяет best-effort семантику:
+неотправленные пакеты отбрасываются. Нагрузочный тест фиксирует потерю,
+а не гарантирует retransmit на этом уровне. Короткий тег data plane
+не обеспечивает AEAD-аутентификацию всей полезной нагрузки.
+
+Артефакты integration/load остаются внутри Docker и удаляются после
+тестирования (`docker run --rm`). Локальные unit-сборки сохраняются в
+`build/tests/unit/` и исключены из Docker-контекста. Для отладки можно отдельно
+запустить тесты непосредственно из дерева исходников с `QUICTUN_BIN`, но это
+не стандартный путь запуска.
+
+Loopback E2E проверяет QUIC и UDP непосредственно, тогда как network E2E
+проверяет WireGuard поверх виртуальной IPv4/IPv6 сети внутри Docker. Показания
+`iperf3` на одном хосте не равны результатам на физической сети.
 
 ## Ограничения текущей реализации
 

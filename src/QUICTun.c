@@ -495,7 +495,8 @@ static int32_t tx_queue_push(tx_queue_t *q, int32_t fd, const void *data, size_t
                              const struct sockaddr *addr, socklen_t addr_len,
                              tx_stat_kind_t stat_kind)
 {
-    if (!q || fd < 0 || !data || len == 0 || len > PICOQUIC_MAX_PACKET_SIZE) {
+    if (!q || fd < 0 || !data || len == 0 || len > PICOQUIC_MAX_PACKET_SIZE ||
+        (addr_len != 0 && (!addr || addr_len > sizeof(struct sockaddr_storage)))) {
         errno = EINVAL;
         tx_errno_add(stat_kind);
         tx_stat_add(stat_kind, 1, len);
@@ -1479,7 +1480,7 @@ static connects_client_t *find_connect_cnx_client(picoquic_cnx_t *cnx)
 static connects_client_t *find_connect_addr_client(const netaddr_t *addr)
 {
     for (int32_t i = 0; i < connects_client_n; i++) {
-        if (netaddr_equal(&connects_client[i].to_wg_addr, addr)) {
+        if (connects_client[i].client_cnx && netaddr_equal(&connects_client[i].to_wg_addr, addr)) {
             uint64_t age_us = picoquic_current_time() -
                               picoquic_get_cnx_start_time(connects_client[i].client_cnx);
 
@@ -1604,10 +1605,11 @@ static int32_t qt_data_mask(uint8_t *data_hdr, uint32_t payload_len,
         return 0;
     }
 
-    uint32_t ctr = ++(*send_ctr);
-    if (ctr == 0) {
+    /* Never wrap: reusing a counter would reuse a masked wire identifier. */
+    if (*send_ctr == UINT32_MAX) {
         return 0;
     }
+    uint32_t ctr = ++(*send_ctr);
 
     uint32_t wire_id = qt_wire_id_from_ctr(key, ctr);
     uint8_t *masked16 = data_hdr + QT_DATA_HDR_SIZE;
@@ -1647,52 +1649,65 @@ static int32_t qt_data_unmask(uint8_t *data_hdr, uint32_t payload_len,
 
 /* ===================== connection setup ===================== */
 
-static void add_connect_client(connects_client_t *connect_c, picoquic_quic_t *quic)
+static int32_t add_connect_client(connects_client_t *connect_c, picoquic_quic_t *quic)
 {
+    if (!connect_c || !quic) {
+        return -EINVAL;
+    }
+
+    /* Prepare the UDP transport first. On failure, no PicoQUIC connection
+     * exists and the caller can safely reuse the still-empty client slot. */
+    int32_t fd = make_udp_socket(netaddr_family(&cfg_global.endpoint_quic_addr));
+    if (fd < 0) {
+        return fd;
+    }
+
+    if (connect(fd, (struct sockaddr *)&cfg_global.endpoint_quic_addr.ss,
+                cfg_global.endpoint_quic_addr.len) < 0) {
+        int32_t rc = -errno;
+        close(fd);
+        return rc;
+    }
+
+    struct sockaddr_storage local;
+    socklen_t local_len = sizeof(local);
+    netaddr_t local_addr;
+    memset(&local, 0, sizeof(local));
+    if (getsockname(fd, (struct sockaddr *)&local, &local_len) < 0) {
+        int32_t rc = -errno;
+        close(fd);
+        return rc;
+    }
+    int32_t rc = netaddr_from_sockaddr(&local_addr, (struct sockaddr *)&local, local_len);
+    if (rc < 0) {
+        close(fd);
+        return rc;
+    }
+
     picoquic_connection_id_t icid = picoquic_null_connection_id;
     picoquic_connection_id_t rcid = picoquic_null_connection_id;
-    uint64_t now = picoquic_current_time();
-
     picoquic_cnx_t *client_cnx =
         picoquic_create_cnx(quic, icid, rcid, (struct sockaddr *)&cfg_global.endpoint_quic_addr.ss,
-                            now, 0, cfg_global.sni, SERVER_ALPN, 1);
-
+                            picoquic_current_time(), 0, cfg_global.sni, SERVER_ALPN, 1);
     if (!client_cnx) {
-        return;
+        close(fd);
+        return -EIO;
     }
 
     picoquic_enable_keep_alive(client_cnx, 0);
-    picoquic_start_client_cnx(client_cnx);
+    if (picoquic_start_client_cnx(client_cnx) != 0) {
+        picoquic_delete_cnx(client_cnx);
+        close(fd);
+        return -EIO;
+    }
 
+    /* Publish only a fully initialized connection to the event loop. */
     connect_c->client_cnx = client_cnx;
-
-    connect_c->to_server_quic_sock =
-        make_udp_socket(netaddr_family(&cfg_global.endpoint_quic_addr));
-    if (connect_c->to_server_quic_sock < 0) {
-        return;
-    }
-
-    if (connect(connect_c->to_server_quic_sock,
-                (struct sockaddr *)&cfg_global.endpoint_quic_addr.ss,
-                cfg_global.endpoint_quic_addr.len) < 0) {
-        return;
-    }
-
-    struct sockaddr_storage tmp_local;
-    socklen_t quic_client_addr_len = sizeof(tmp_local);
-    memset(&tmp_local, 0, sizeof(tmp_local));
-
-    if (getsockname(connect_c->to_server_quic_sock, (struct sockaddr *)&tmp_local,
-                    &quic_client_addr_len) == 0) {
-        netaddr_from_sockaddr(&connect_c->to_server_quic_local_addr, (struct sockaddr *)&tmp_local,
-                              quic_client_addr_len);
-    }
-
-    picoquic_connection_id_t remote_dcid = picoquic_get_remote_cnxid(connect_c->client_cnx);
-    picoquic_connection_id_t local_dcid = picoquic_get_local_cnxid(connect_c->client_cnx);
-
-    memcpy(&connect_c->remote_dcid, &remote_dcid, sizeof(remote_dcid));
-    memcpy(&connect_c->local_dcid, &local_dcid, sizeof(local_dcid));
+    connect_c->to_server_quic_sock = fd;
+    connect_c->to_server_quic_local_addr = local_addr;
+    connect_c->remote_dcid = picoquic_get_remote_cnxid(client_cnx);
+    connect_c->local_dcid = picoquic_get_local_cnxid(client_cnx);
+    return 0;
 }
 
 static void append_connect_client(connects_client_t *connect_c)
@@ -2228,14 +2243,19 @@ static void wg_rx_send_quic_client(int32_t wg_client_sock, picoquic_quic_t *quic
 
         if (!connect_c) {
             if (connects_client_n < MAX_PEERS_COUNT) {
-                connect_c = &connects_client[connects_client_n++];
+                connect_c = &connects_client[connects_client_n];
                 memset(connect_c, 0, sizeof(*connect_c));
                 connect_c->to_server_quic_sock = -1;
                 netaddr_copy(&connect_c->to_wg_addr, &from_wg_addr);
 
-                add_connect_client(connect_c, quic);
-
-                logids("Client created\n", &connect_c->remote_dcid, &connect_c->local_dcid);
+                if (add_connect_client(connect_c, quic) == 0) {
+                    connects_client_n++;
+                    logids("Client created\n", &connect_c->remote_dcid, &connect_c->local_dcid);
+                } else {
+                    memset(connect_c, 0, sizeof(*connect_c));
+                    connect_c->to_server_quic_sock = -1;
+                    connect_c = NULL;
+                }
             }
 
             if (!connect_c || !connect_c->client_cnx || connect_c->to_server_quic_sock < 0) {
@@ -2563,19 +2583,22 @@ int32_t main(int32_t argc, char *argv[])
 
                 if (age_us > MAX_CNX_TTL * S_TO_MICROS * EARLY_START &&
                     !connects_client[i].prefetch_mark && connects_client[i].used_mark) {
-                    connects_client[i].prefetch_mark = 1;
-
                     if (connects_client_n < MAX_PEERS_COUNT) {
-                        connects_client_t *connect_c_new = &connects_client[connects_client_n++];
+                        connects_client_t *connect_c_new = &connects_client[connects_client_n];
 
                         memset(connect_c_new, 0, sizeof(*connect_c_new));
                         connect_c_new->to_server_quic_sock = -1;
                         netaddr_copy(&connect_c_new->to_wg_addr, &connects_client[i].to_wg_addr);
 
-                        add_connect_client(connect_c_new, quic);
-
-                        logids("Client prefetch created\n", &connect_c_new->remote_dcid,
-                               &connect_c_new->local_dcid);
+                        if (add_connect_client(connect_c_new, quic) == 0) {
+                            connects_client[i].prefetch_mark = 1;
+                            connects_client_n++;
+                            logids("Client prefetch created\n", &connect_c_new->remote_dcid,
+                                   &connect_c_new->local_dcid);
+                        } else {
+                            memset(connect_c_new, 0, sizeof(*connect_c_new));
+                            connect_c_new->to_server_quic_sock = -1;
+                        }
                     }
                 }
 
@@ -2660,11 +2683,6 @@ int32_t main(int32_t argc, char *argv[])
                 tm_now.tm_sec);
     }
 
-    if (g_store) {
-        X509_STORE_free(g_store);
-        g_store = NULL;
-    }
-
     if (quic_server_sock >= 0) {
         close(quic_server_sock);
     }
@@ -2673,6 +2691,12 @@ int32_t main(int32_t argc, char *argv[])
     }
 
     picoquic_free(quic);
+    if (g_store) {
+        ptls_openssl_dispose_verify_certificate(&g_verifier);
+        X509_STORE_free(g_store);
+        g_store = NULL;
+    }
+
     cfg_free(&cfg_global);
     peers_free();
 
