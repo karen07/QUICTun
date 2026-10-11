@@ -3,7 +3,12 @@ build/
 certs/
 configs/
 log/
-wgs/
-systemd/
 test_client_cert_four_phases/
 test_config_validation/
+
+test_load_stress/
+test_network_e2e/
+
+# Python test artifacts
+__pycache__/
+*.pyc
