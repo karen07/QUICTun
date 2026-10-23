@@ -8,13 +8,13 @@ loss is reported explicitly instead of being silently ignored.
 
 import hashlib
 import os
-from pathlib import Path
 import select
 import socket
 import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
 import test_quictun as e2e  # Reuse the established certificate/E2E setup.
