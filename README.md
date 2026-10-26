@@ -1,22 +1,47 @@
 # QUICTun
 
-QUICTun is a WireGuard UDP tunnel that uses a real QUIC connection as its control plane and a separate session-bound custom UDP data plane for WireGuard packets.
-
-The QUIC side provides the handshake, TLS certificate authentication, exporter-derived session secrets, Connection IDs, and the lifecycle used to bind data-plane packets to a specific authenticated session. WireGuard payload is not sent through QUIC streams.
-
-After the QUIC session is established, WireGuard packets are encapsulated in a compact QUIC-like UDP format and demultiplexed with session-derived identifiers, counters, masking, and a short keyed tag. WireGuard itself remains responsible for the cryptographic confidentiality and integrity of the tunneled payload.
-
-The project is primarily a networking experiment in separating authenticated QUIC session establishment from a lightweight high-throughput UDP data path, while keeping the normal WireGuard endpoint on each side.
+QUICTun is a WireGuard UDP tunnel with a real QUIC control connection and a separate
+session-bound UDP data plane. QUIC authenticates and establishes session secrets;
+WireGuard payload packets travel outside the QUIC stream.
 
 ## Описание
 
-QUICTun - UDP туннель для WireGuard, который использует настоящее соединение QUIC как плоскость управления и отдельную собственную плоскость данных UDP, привязанную к сессии, для передачи пакетов WireGuard.
+QUICTun - UDP-туннель для WireGuard с настоящим QUIC-соединением для управления и отдельной
+привязанной к сессии плоскостью данных UDP. QUIC обеспечивает аутентификацию и установление
+сеансовых секретов, а пакеты WireGuard передаются вне потоков QUIC.
 
-Сторона QUIC обеспечивает рукопожатие, аутентификацию по сертификатам TLS, сеансовые секреты, полученные через exporter, идентификаторы соединения и жизненный цикл, который связывает пакеты плоскости данных с конкретной аутентифицированной сессией. Полезная нагрузка WireGuard не передается через потоки QUIC.
+QUIC использует сертификаты TLS для аутентификации и exporter для получения сеансовых секретов.
+Идентификаторы соединения и состояние сессии связывают каждый пакет плоскости данных с
+соответствующей аутентифицированной сессией.
 
 После установления сессии QUIC пакеты WireGuard инкапсулируются в компактный QUIC-подобный формат UDP и разделяются по сеансам с помощью производных идентификаторов, счетчиков, маскирования и короткой ключевой метки. За криптографическую конфиденциальность и целостность туннелируемой полезной нагрузки по-прежнему отвечает сам WireGuard.
 
 Проект в первую очередь является сетевым экспериментом по разделению аутентифицированного установления сессии QUIC и легкого высокопроизводительного пути данных UDP при сохранении обычной конечной точки WireGuard на каждой стороне.
+
+## Содержание
+
+- [С чего начать](#%D1%81-%D1%87%D0%B5%D0%B3%D0%BE-%D0%BD%D0%B0%D1%87%D0%B0%D1%82%D1%8C)
+- [Что делает проект](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
+- [Модель безопасности](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D0%B1%D0%B5%D0%B7%D0%BE%D0%BF%D0%B0%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8)
+- [Что НЕ делает текущий data plane](#%D1%87%D1%82%D0%BE-%D0%BD%D0%B5-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D1%82%D0%B5%D0%BA%D1%83%D1%89%D0%B8%D0%B9-data-plane)
+- [Формат пакета для WireGuard payload](#%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%B0-%D0%B4%D0%BB%D1%8F-wireguard-payload)
+- [Режимы работы](#%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D1%8B-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B)
+- [Конфигурация](#%D0%BA%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D1%8F)
+- [systemd](#systemd)
+- [Структура проекта](#%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
+- [Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0)
+- [Тесты](#%D1%82%D0%B5%D1%81%D1%82%D1%8B)
+- [Ограничения текущей реализации](#%D0%BE%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F-%D1%82%D0%B5%D0%BA%D1%83%D1%89%D0%B5%D0%B9-%D1%80%D0%B5%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D0%B8)
+
+## С чего начать
+
+Если нужна рабочая конфигурация, переходите к разделам
+[Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0),
+[Конфигурация](#%D0%BA%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D1%8F)
+и [Режимы работы](#%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D1%8B-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B).
+Перед развёртыванием ознакомьтесь с моделью безопасности и ограничениями
+текущей реализации. Подробное описание формата пакетов приведено ниже
+в качестве технического справочника.
 
 ## Что делает проект
 
@@ -618,7 +643,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-## Зависимости
+## Требования
 
 Основные зависимости:
 
