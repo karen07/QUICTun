@@ -4,11 +4,11 @@ QUICTun is a WireGuard UDP tunnel with a real QUIC control connection and a sepa
 session-bound UDP data plane. QUIC authenticates and establishes session secrets;
 WireGuard payload packets travel outside the QUIC stream.
 
-## Описание
-
 QUICTun - UDP-туннель для WireGuard с настоящим QUIC-соединением для управления и отдельной
 привязанной к сессии плоскостью данных UDP. QUIC обеспечивает аутентификацию и установление
 сеансовых секретов, а пакеты WireGuard передаются вне потоков QUIC.
+
+## Описание
 
 QUIC использует сертификаты TLS для аутентификации и exporter для получения сеансовых секретов.
 Идентификаторы соединения и состояние сессии связывают каждый пакет плоскости данных с
@@ -20,20 +20,47 @@ QUIC использует сертификаты TLS для аутентифик
 
 ## Содержание
 
-- [С чего начать](#%D1%81-%D1%87%D0%B5%D0%B3%D0%BE-%D0%BD%D0%B0%D1%87%D0%B0%D1%82%D1%8C)
+- [Навигация](#%D0%BD%D0%B0%D0%B2%D0%B8%D0%B3%D0%B0%D1%86%D0%B8%D1%8F)
+- [Разработка и проверка изменений](#%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B0-%D0%B8-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B9)
+  - [Поток данных и точки изменения](#%D0%BF%D0%BE%D1%82%D0%BE%D0%BA-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85-%D0%B8-%D1%82%D0%BE%D1%87%D0%BA%D0%B8-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [Типовые изменения](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D1%8B%D0%B5-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [Инварианты для правок](#%D0%B8%D0%BD%D0%B2%D0%B0%D1%80%D0%B8%D0%B0%D0%BD%D1%82%D1%8B-%D0%B4%D0%BB%D1%8F-%D0%BF%D1%80%D0%B0%D0%B2%D0%BE%D0%BA)
+- [Требования](#%D1%82%D1%80%D0%B5%D0%B1%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F)
+- [Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0)
+  - [CMake presets](#cmake-presets)
 - [Что делает проект](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
 - [Модель безопасности](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D0%B1%D0%B5%D0%B7%D0%BE%D0%BF%D0%B0%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8)
 - [Что НЕ делает текущий data plane](#%D1%87%D1%82%D0%BE-%D0%BD%D0%B5-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D1%82%D0%B5%D0%BA%D1%83%D1%89%D0%B8%D0%B9-data-plane)
 - [Формат пакета для WireGuard payload](#%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%B0-%D0%B4%D0%BB%D1%8F-wireguard-payload)
+- [Как различаются обычный QUIC и tunnel data packets](#%D0%BA%D0%B0%D0%BA-%D1%80%D0%B0%D0%B7%D0%BB%D0%B8%D1%87%D0%B0%D1%8E%D1%82%D1%81%D1%8F-%D0%BE%D0%B1%D1%8B%D1%87%D0%BD%D1%8B%D0%B9-quic-%D0%B8-tunnel-data-packets)
 - [Режимы работы](#%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D1%8B-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B)
+  - [Клиентский режим](#%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D1%81%D0%BA%D0%B8%D0%B9-%D1%80%D0%B5%D0%B6%D0%B8%D0%BC)
+  - [Серверный режим](#%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B9-%D1%80%D0%B5%D0%B6%D0%B8%D0%BC)
 - [Конфигурация](#%D0%BA%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D1%8F)
+  - [Ключи Interface](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-interface)
+  - [Ключи Peer](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-peer)
+- [Аутентификация клиентов](#%D0%B0%D1%83%D1%82%D0%B5%D0%BD%D1%82%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%BE%D0%B2)
+- [Основные структуры состояния](#%D0%BE%D1%81%D0%BD%D0%BE%D0%B2%D0%BD%D1%8B%D0%B5-%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D1%8B-%D1%81%D0%BE%D1%81%D1%82%D0%BE%D1%8F%D0%BD%D0%B8%D1%8F)
+  - [Client entries](#client-entries)
+  - [Server entries](#server-entries)
+- [Жизненный цикл соединения](#%D0%B6%D0%B8%D0%B7%D0%BD%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB-%D1%81%D0%BE%D0%B5%D0%B4%D0%B8%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [На клиенте](#%D0%BD%D0%B0-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%B5)
+  - [На сервере](#%D0%BD%D0%B0-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B5)
+- [TTL и предварительное обновление](#ttl-%D0%B8-%D0%BF%D1%80%D0%B5%D0%B4%D0%B2%D0%B0%D1%80%D0%B8%D1%82%D0%B5%D0%BB%D1%8C%D0%BD%D0%BE%D0%B5-%D0%BE%D0%B1%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5)
+- [Логи и статистика](#%D0%BB%D0%BE%D0%B3%D0%B8-%D0%B8-%D1%81%D1%82%D0%B0%D1%82%D0%B8%D1%81%D1%82%D0%B8%D0%BA%D0%B0)
+  - [stdout](#stdout)
+  - [LogPath](#logpath)
+  - [StatPath](#statpath)
 - [systemd](#systemd)
+- [Для чего этот проект](#%D0%B4%D0%BB%D1%8F-%D1%87%D0%B5%D0%B3%D0%BE-%D1%8D%D1%82%D0%BE%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
+- [Не цели проекта](#%D0%BD%D0%B5-%D1%86%D0%B5%D0%BB%D0%B8-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
+- [Тестирование](#%D1%82%D0%B5%D1%81%D1%82%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5)
+- [Ограничения](#%D0%BE%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F)
 - [Структура проекта](#%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
-- [Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0)
-- [Тесты](#%D1%82%D0%B5%D1%81%D1%82%D1%8B)
-- [Ограничения текущей реализации](#%D0%BE%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D1%8F-%D1%82%D0%B5%D0%BA%D1%83%D1%89%D0%B5%D0%B9-%D1%80%D0%B5%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D0%B8)
+- [Краткая памятка](#%D0%BA%D1%80%D0%B0%D1%82%D0%BA%D0%B0%D1%8F-%D0%BF%D0%B0%D0%BC%D1%8F%D1%82%D0%BA%D0%B0)
+- [Лицензия](#%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F)
 
-## С чего начать
+## Навигация
 
 Если нужна рабочая конфигурация, переходите к разделам
 [Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0),
@@ -42,6 +69,141 @@ QUIC использует сертификаты TLS для аутентифик
 Перед развёртыванием ознакомьтесь с моделью безопасности и ограничениями
 текущей реализации. Подробное описание формата пакетов приведено ниже
 в качестве технического справочника.
+
+## Разработка и проверка изменений
+
+**Основные точки изменения:**
+
+- `src/QUICTun.c` - основной код клиента и сервера: QUIC, UDP data plane, конфигурация и состояние сессий;
+- `src/errno_names.c` - человекочитаемые названия кодов ошибок;
+- `tests/unit/test_core.c` - проверки низкоуровневой логики и структур состояния;
+- `tests/integration/test_quictun.py` - межпроцессные сценарии клиента и сервера;
+- `tests/load/test_load.py` - проверки под нагрузкой.
+
+**Проверка изменений:** Меняя протокол, сверяйтесь с разделами "Модель безопасности" и "Формат пакета для WireGuard payload": QUIC control plane и отдельный UDP data plane нельзя смешивать. После изменения пакетного формата или сессий запускайте тесты из `tests/unit/`, `tests/integration/` и `tests/load/` согласно разделу "Тестирование"; не считайте сборку доказательством совместимости.
+
+### Поток данных и точки изменения
+
+- Путь клиента: `wg_rx_send_quic_client` принимает локальные UDP-пакеты WireGuard,
+  временно сохраняет их до готовности QUIC и передает в `wg_payload_queue_quic_client`.
+  Отправка использует `qt_data_mask` и `tx_queue_push`.
+- На сервере за направление от локального WireGuard к удаленному клиенту отвечает
+  `wg_rx_send_quic_server`; прием и распознавание входящих UDP-пакетов разделены между
+  `quic_rx_dispatch_client`, `quic_rx_dispatch_server` и `wg_hdr_try_decrypt_*`.
+- При изменении формата пакета проверяйте **обе** стороны отправки и приема,
+  а также соответствие ключей, DCID, счетчика и длины полезной нагрузки.
+
+### Типовые изменения
+
+- Формат UDP-пакета: изменяйте отправку и прием с обеих сторон в `src/QUICTun.c`;
+  сверяйте `tests/unit/test_core.c` и `tests/integration/test_quictun.py`.
+- Ожидание готовности QUIC: ищите `pending_wg_*` и очереди отправки;
+  проверяйте ограничения памяти и времени хранения в unit-тестах.
+- Конфигурация соединения: проверяйте вместе чтение конфигурации, создание
+  клиентского и серверного состояния и примеры параметров ниже в README.
+
+### Инварианты для правок
+
+- `qt_data_mask` и `qt_data_unmask` работают с 4-байтовым wire ID, 4-байтовой
+  меткой и маскированием первых 16 байт payload. Полезная нагрузка короче
+  16 байт отвергается; переполнение 32-битного счетчика отправки запрещено.
+- Метка и маскирование заголовка не заменяют криптографическую защиту
+  полезной нагрузки WireGuard. Не описывайте их как полноценный AEAD.
+- Очередь клиента до состояния `picoquic_state_ready` ограничена 64 пакетами,
+  256 КиБ и временем хранения 5 секунд. Переполнение вытесняет старые пакеты;
+  эту семантику нужно сохранять или явно менять вместе с тестами.
+- Для правок очереди и формата сверяйте `tests/unit/test_core.c`, а для
+  взаимодействия сторон - `tests/integration/test_quictun.py`.
+
+## Требования
+
+Основные зависимости:
+
+- C compiler с поддержкой GNU11
+- CMake
+- make
+- OpenSSL
+- Git
+- picoquic submodule
+- picotls submodule
+
+## Сборка
+
+Клонируйте репозиторий с submodules:
+
+```sh
+git clone --recurse-submodules https://github.com/karen07/QUICTun.git
+cd QUICTun
+```
+
+Если репозиторий уже был склонирован без submodules:
+
+```sh
+git submodule update --init --recursive
+```
+
+Обычная release сборка:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+```
+
+Или без preset:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
+Установка только самого QUICTun (без picoquic/picotls headers, libraries и demo-программ):
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j
+sudo cmake --install build
+```
+
+В этом примере устанавливается **только** `/usr/bin/QUICTun`. Если использовать
+CMake без `-DCMAKE_INSTALL_PREFIX=/usr`, стандартный префикс `/usr/local`
+установит бинарник в `/usr/local/bin/QUICTun`.
+
+Без root можно проверить содержимое установки в отдельном каталоге:
+
+```sh
+DESTDIR="$(mktemp -d)" cmake --install build
+```
+
+`add_subdirectory(picoquic EXCLUDE_FROM_ALL)` оставляет picoquic доступным
+для сборки QUICTun, но не включает его собственные install-правила.
+Уже ранее установленные файлы picoquic/picotls команда `install` **не удаляет**.
+
+Форматирование исходников теперь явно запускается через `cmake --build build --target quictun-format`
+(при наличии clang-format); обычная сборка не изменяет исходные файлы.
+
+### CMake presets
+
+В проекте есть presets:
+
+```text
+debug
+debug-asan
+debug-msan
+release
+```
+
+Примеры:
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+
+cmake --preset debug-asan
+cmake --build --preset debug-asan
+
+cmake --preset release
+cmake --build --preset release
+```
 
 ## Что делает проект
 
@@ -218,7 +380,7 @@ QUICTun работает в одном из двух режимов:
 
 Одновременно включать оба режима нельзя.
 
-## Клиентский режим
+### Клиентский режим
 
 Client mode включается, если в конфиге заданы:
 
@@ -247,7 +409,7 @@ StatPath = /var/log/QUICTun_stat.txt
 SNI = example.com
 ```
 
-## Серверный режим
+### Серверный режим
 
 Server mode включается, если в конфиге задан:
 
@@ -306,7 +468,7 @@ Key = Value
 
 Пробелы по краям ключей и значений обрезаются.
 
-## Ключи Interface
+### Ключи Interface
 
 | Ключ | Режим | Значение |
 | -------------- | ------------- | ------------------------------------------------------------------------- |
@@ -330,7 +492,7 @@ StatPath = /var/log/QUICTun_stat.txt
 SNI = example.com
 ```
 
-## Ключи Peer
+### Ключи Peer
 
 Секция `[Peer]` используется на сервере.
 
@@ -527,135 +689,32 @@ QUICTun-client2.service
 
 Units зависят от `network-online.target` и могут иметь связи с `wg-quick@...`.
 
-## Структура проекта
+## Для чего этот проект
 
-```text
-.
-|-- CMakeLists.txt
-|-- CMakePresets.json
-|-- LICENSE
-|-- README.md
-|-- picoquic
-|-- picotls
-|-- src
-|   |-- QUICTun.c
-|   `-- errno_names.c
-`-- tests
-    |-- integration
-    |   |-- Dockerfile
-    |   |-- run.sh
-    |   `-- test_quictun.py
-    |-- load
-    |   |-- Dockerfile
-    |   |-- run.sh
-    |   `-- test_load.py
-    `-- unit
-        |-- run.sh
-        |-- test_core.c
-        `-- test_install.py
-```
+QUICTun подходит для экспериментов и controlled deployment, когда нужно:
 
-Основные файлы:
+- использовать QUIC handshake и TLS certificate authentication;
+- привязать UDP data plane к QUIC сессии;
+- передавать WireGuard payload без QUIC streams;
+- маскировать WireGuard трафик под QUIC-like UDP;
+- авторизовать клиентов по whitelist сертификатов;
+- быстро demux делать между QUIC control plane и tunnel data plane;
+- тестировать restart, TTL и prefetch поведение;
+- разворачивать multi-peer стенд с systemd и WireGuard.
 
-| Путь | Назначение |
-| --------------------------- | --------------------------------------------------- |
-| `src/QUICTun.c` | Основная программа на C. |
-| `src/errno_names.c` | Вспомогательный вывод errno names. |
-| `picoquic/` | QUIC implementation submodule. |
-| `picotls/` | TLS library submodule для picoquic. |
-| `tests/integration/test_quictun.py` | Валидация, QUIC/UDP E2E и реальные WireGuard/network namespace тесты. |
+## Не цели проекта
 
-## Сборка
+Проект не пытается:
 
-Клонируйте репозиторий с submodules:
+- заменить WireGuard;
+- быть универсальным VPN клиентом;
+- реализовать стандартный QUIC DATAGRAM transport;
+- дать второе полноценное шифрование поверх WireGuard payload;
+- скрыть все сетевые признаки трафика;
+- автоматически настраивать firewall и routing policy;
+- быть production ready решением без аудита и дополнительных проверок.
 
-```sh
-git clone --recurse-submodules https://github.com/karen07/QUICTun.git
-cd QUICTun
-```
-
-Если репозиторий уже был склонирован без submodules:
-
-```sh
-git submodule update --init --recursive
-```
-
-Обычная release сборка:
-
-```sh
-cmake --preset release
-cmake --build --preset release
-```
-
-Или без preset:
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-```
-
-Установка только самого QUICTun (без picoquic/picotls headers, libraries и demo-программ):
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build build -j
-sudo cmake --install build
-```
-
-В этом примере устанавливается **только** `/usr/bin/QUICTun`. Если использовать
-CMake без `-DCMAKE_INSTALL_PREFIX=/usr`, стандартный префикс `/usr/local`
-установит бинарник в `/usr/local/bin/QUICTun`.
-
-Без root можно проверить содержимое установки в отдельном каталоге:
-
-```sh
-DESTDIR="$(mktemp -d)" cmake --install build
-```
-
-`add_subdirectory(picoquic EXCLUDE_FROM_ALL)` оставляет picoquic доступным
-для сборки QUICTun, но не включает его собственные install-правила.
-Уже ранее установленные файлы picoquic/picotls команда `install` **не удаляет**.
-
-Форматирование исходников теперь явно запускается через `cmake --build build --target quictun-format`
-(при наличии clang-format); обычная сборка не изменяет исходные файлы.
-
-## CMake presets
-
-В проекте есть presets:
-
-```text
-debug
-debug-asan
-debug-msan
-release
-```
-
-Примеры:
-
-```sh
-cmake --preset debug
-cmake --build --preset debug
-
-cmake --preset debug-asan
-cmake --build --preset debug-asan
-
-cmake --preset release
-cmake --build --preset release
-```
-
-## Требования
-
-Основные зависимости:
-
-- C compiler с поддержкой GNU11
-- CMake
-- make
-- OpenSSL
-- Git
-- picoquic submodule
-- picotls submodule
-
-## Тесты
+## Тестирование
 
 Структура тестов повторяет AntiBlock: в `tests/` находятся только
 `unit/`, `integration/` и `load/`. В каждом каталоге есть независимый `run.sh`.
@@ -775,7 +834,7 @@ Loopback E2E проверяет QUIC и UDP непосредственно, то
 проверяет WireGuard поверх виртуальной IPv4/IPv6 сети внутри Docker. Показания
 `iperf3` на одном хосте не равны результатам на физической сети.
 
-## Ограничения текущей реализации
+## Ограничения
 
 - Максимум активных peer/connection entries ограничен `MAX_PEERS_COUNT`.
 - Таблицы соединений реализованы как фиксированные массивы.
@@ -788,32 +847,45 @@ Loopback E2E проверяет QUIC и UDP непосредственно, то
 - QUICTun masking/obfuscation не заменяет WireGuard cryptography.
 - Если нужна самостоятельная защита payload поверх WireGuard, нужен отдельный полноценный AEAD design.
 
-## Для чего этот проект
+## Структура проекта
 
-QUICTun подходит для экспериментов и controlled deployment, когда нужно:
+```text
+.
+|-- CMakeLists.txt
+|-- CMakePresets.json
+|-- LICENSE
+|-- README.md
+|-- picoquic
+|-- picotls
+|-- src
+|   |-- QUICTun.c
+|   `-- errno_names.c
+`-- tests
+    |-- integration
+    |   |-- Dockerfile
+    |   |-- run.sh
+    |   `-- test_quictun.py
+    |-- load
+    |   |-- Dockerfile
+    |   |-- run.sh
+    |   `-- test_load.py
+    `-- unit
+        |-- run.sh
+        |-- test_core.c
+        `-- test_install.py
+```
 
-- использовать QUIC handshake и TLS certificate authentication;
-- привязать UDP data plane к QUIC сессии;
-- передавать WireGuard payload без QUIC streams;
-- маскировать WireGuard трафик под QUIC-like UDP;
-- авторизовать клиентов по whitelist сертификатов;
-- быстро demux делать между QUIC control plane и tunnel data plane;
-- тестировать restart, TTL и prefetch поведение;
-- разворачивать multi-peer стенд с systemd и WireGuard.
+Основные файлы:
 
-## Не цели проекта
+| Путь | Назначение |
+| --------------------------- | --------------------------------------------------- |
+| `src/QUICTun.c` | Основная программа на C. |
+| `src/errno_names.c` | Вспомогательный вывод errno names. |
+| `picoquic/` | QUIC implementation submodule. |
+| `picotls/` | TLS library submodule для picoquic. |
+| `tests/integration/test_quictun.py` | Валидация, QUIC/UDP E2E и реальные WireGuard/network namespace тесты. |
 
-Проект не пытается:
-
-- заменить WireGuard;
-- быть универсальным VPN клиентом;
-- реализовать стандартный QUIC DATAGRAM transport;
-- дать второе полноценное шифрование поверх WireGuard payload;
-- скрыть все сетевые признаки трафика;
-- автоматически настраивать firewall и routing policy;
-- быть production ready решением без аудита и дополнительных проверок.
-
-## Коротко
+## Краткая памятка
 
 ```sh
 git clone --recurse-submodules https://github.com/karen07/QUICTun.git
@@ -832,4 +904,4 @@ QUICTun - это специализированный UDP туннель для 
 
 ## Лицензия
 
-Проект распространяется под лицензией GNU Affero General Public License v3.0. Подробности смотрите в файле LICENSE.
+Проект распространяется под лицензией GNU Affero General Public License v3.0. Подробности см. в файле [LICENSE](LICENSE).
