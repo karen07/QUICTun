@@ -19,7 +19,7 @@ QUIC-подобный UDP-формат. Привязка к сессии исп�
 счётчики, маскирование и короткую ключевую метку. Конфиденциальность и целостность
 полезной нагрузки по-прежнему обеспечивает WireGuard.
 
-Проект в первую очередь является сетевым экспериментом по разделению аутентифицированного установления сессии QUIC и легкого высокопроизводительного пути данных UDP при сохранении обычной конечной точки WireGuard на каждой стороне.
+Проект в первую очередь является сетевым экспериментом по разделению аутентифицированного установления сессии QUIC и лёгкого высокопроизводительного пути данных UDP при сохранении обычной конечной точки WireGuard на каждой стороне.
 
 ## Содержание
 
@@ -30,22 +30,22 @@ QUIC-подобный UDP-формат. Привязка к сессии исп�
   - [Инварианты для правок](#%D0%B8%D0%BD%D0%B2%D0%B0%D1%80%D0%B8%D0%B0%D0%BD%D1%82%D1%8B-%D0%B4%D0%BB%D1%8F-%D0%BF%D1%80%D0%B0%D0%B2%D0%BE%D0%BA)
 - [Требования](#%D1%82%D1%80%D0%B5%D0%B1%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F)
 - [Сборка](#%D1%81%D0%B1%D0%BE%D1%80%D0%BA%D0%B0)
-  - [CMake presets](#cmake-presets)
+  - [Пресеты CMake](#%D0%BF%D1%80%D0%B5%D1%81%D0%B5%D1%82%D1%8B-cmake)
 - [Что делает проект](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
 - [Модель безопасности](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D0%B1%D0%B5%D0%B7%D0%BE%D0%BF%D0%B0%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8)
-- [Что НЕ делает текущий data plane](#%D1%87%D1%82%D0%BE-%D0%BD%D0%B5-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D1%82%D0%B5%D0%BA%D1%83%D1%89%D0%B8%D0%B9-data-plane)
-- [Формат пакета для WireGuard payload](#%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%B0-%D0%B4%D0%BB%D1%8F-wireguard-payload)
-- [Как различаются обычный QUIC и tunnel data packets](#%D0%BA%D0%B0%D0%BA-%D1%80%D0%B0%D0%B7%D0%BB%D0%B8%D1%87%D0%B0%D1%8E%D1%82%D1%81%D1%8F-%D0%BE%D0%B1%D1%8B%D1%87%D0%BD%D1%8B%D0%B9-quic-%D0%B8-tunnel-data-packets)
+- [Что не делает плоскость данных](#%D1%87%D1%82%D0%BE-%D0%BD%D0%B5-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-%D0%BF%D0%BB%D0%BE%D1%81%D0%BA%D0%BE%D1%81%D1%82%D1%8C-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85)
+- [Формат UDP-пакета с данными WireGuard](#%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%82-udp-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%B0-%D1%81-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8-wireguard)
+- [Различение QUIC-пакетов и пакетов туннеля](#%D1%80%D0%B0%D0%B7%D0%BB%D0%B8%D1%87%D0%B5%D0%BD%D0%B8%D0%B5-quic-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D0%B8-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%82%D1%83%D0%BD%D0%BD%D0%B5%D0%BB%D1%8F)
 - [Режимы работы](#%D1%80%D0%B5%D0%B6%D0%B8%D0%BC%D1%8B-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D1%8B)
   - [Клиентский режим](#%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D1%81%D0%BA%D0%B8%D0%B9-%D1%80%D0%B5%D0%B6%D0%B8%D0%BC)
   - [Серверный режим](#%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%BD%D1%8B%D0%B9-%D1%80%D0%B5%D0%B6%D0%B8%D0%BC)
 - [Конфигурация](#%D0%BA%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D1%8F)
-  - [Ключи Interface](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-interface)
-  - [Ключи Peer](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-peer)
+  - [Параметры Interface](#%D0%BF%D0%B0%D1%80%D0%B0%D0%BC%D0%B5%D1%82%D1%80%D1%8B-interface)
+  - [Параметры Peer](#%D0%BF%D0%B0%D1%80%D0%B0%D0%BC%D0%B5%D1%82%D1%80%D1%8B-peer)
 - [Аутентификация клиентов](#%D0%B0%D1%83%D1%82%D0%B5%D0%BD%D1%82%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%BE%D0%B2)
 - [Основные структуры состояния](#%D0%BE%D1%81%D0%BD%D0%BE%D0%B2%D0%BD%D1%8B%D0%B5-%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D1%8B-%D1%81%D0%BE%D1%81%D1%82%D0%BE%D1%8F%D0%BD%D0%B8%D1%8F)
-  - [Client entries](#client-entries)
-  - [Server entries](#server-entries)
+  - [Состояние клиента](#%D1%81%D0%BE%D1%81%D1%82%D0%BE%D1%8F%D0%BD%D0%B8%D0%B5-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%B0)
+  - [Состояние сервера](#%D1%81%D0%BE%D1%81%D1%82%D0%BE%D1%8F%D0%BD%D0%B8%D0%B5-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B0)
 - [Жизненный цикл соединения](#%D0%B6%D0%B8%D0%B7%D0%BD%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB-%D1%81%D0%BE%D0%B5%D0%B4%D0%B8%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
   - [На клиенте](#%D0%BD%D0%B0-%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%B5)
   - [На сервере](#%D0%BD%D0%B0-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B5)
@@ -75,6 +75,16 @@ QUIC-подобный UDP-формат. Привязка к сессии исп�
 
 ## Разработка и проверка изменений
 
+**Опорные символы для изменения поведения:**
+
+1. `quictun_config_load_file`, `apply_interface_kv`, `apply_peer_kv` - разбор конфигурации и
+   разделение опций Interface/Peer в `src/QUICTun.c`; затрагиваются и пользовательский формат, и
+   значения состояния.
+1. `quic_conn_event_client`, `quic_conn_event_server` - обработчики событий соединения для обеих
+   сторон; сопоставляйте с `quic_rx_dispatch_client` и `quic_rx_dispatch_server`.
+1. `qt_data_mask`, `qt_data_unmask`, `wg_hdr_try_decrypt_client` - обработка пакетного формата;
+   сверяйте отправителя, получателя и `tests/unit/test_core.c`, не только один обработчик.
+
 **Основные точки изменения:**
 
 - `src/QUICTun.c` - основной код клиента и сервера: QUIC, UDP data plane, конфигурация и состояние сессий;
@@ -83,22 +93,30 @@ QUIC-подобный UDP-формат. Привязка к сессии исп�
 - `tests/integration/test_quictun.py` - межпроцессные сценарии клиента и сервера;
 - `tests/load/test_load.py` - проверки под нагрузкой.
 
+**Точки запуска проверок:** скрипты `tests/unit/run.sh`,
+`tests/integration/run.sh` и `tests/load/run.sh` отвечают за подготовку
+и запуск соответствующих групп. Изменение содержимого теста не всегда
+достаточно: при добавлении нового сценария проверьте его подключение
+к скрипту своей группы. Конфигурация CMake задаётся в `CMakeLists.txt`,
+а конфигурационные профили - в `CMakePresets.json`; различайте параметры
+сборки и реальные сценарии испытаний протокола.
+
 **Проверка изменений:** Меняя протокол, сверяйтесь с разделами "Модель безопасности" и "Формат пакета для WireGuard payload": QUIC control plane и отдельный UDP data plane нельзя смешивать. После изменения пакетного формата или сессий запускайте тесты из `tests/unit/`, `tests/integration/` и `tests/load/` согласно разделу "Тестирование"; не считайте сборку доказательством совместимости.
 
 ### Поток данных и точки изменения
 
 - Путь клиента: `wg_rx_send_quic_client` принимает локальные UDP-пакеты WireGuard,
-  временно сохраняет их до готовности QUIC и передает в `wg_payload_queue_quic_client`.
+  временно сохраняет их до готовности QUIC и передаёт в `wg_payload_queue_quic_client`.
   Отправка использует `qt_data_mask` и `tx_queue_push`.
 - На сервере за направление от локального WireGuard к удаленному клиенту отвечает
-  `wg_rx_send_quic_server`; прием и распознавание входящих UDP-пакетов разделены между
+  `wg_rx_send_quic_server`; приём и распознавание входящих UDP-пакетов разделены между
   `quic_rx_dispatch_client`, `quic_rx_dispatch_server` и `wg_hdr_try_decrypt_*`.
-- При изменении формата пакета проверяйте **обе** стороны отправки и приема,
+- При изменении формата пакета проверяйте **обе** стороны отправки и приёма,
   а также соответствие ключей, DCID, счётчика и длины полезной нагрузки.
 
 ### Типовые изменения
 
-- Формат UDP-пакета: изменяйте отправку и прием с обеих сторон в `src/QUICTun.c`;
+- Формат UDP-пакета: изменяйте отправку и приём с обеих сторон в `src/QUICTun.c`;
   сверяйте `tests/unit/test_core.c` и `tests/integration/test_quictun.py`.
 - Ожидание готовности QUIC: ищите `pending_wg_*` и очереди отправки;
   проверяйте ограничения памяти и времени хранения в unit-тестах.
@@ -117,6 +135,22 @@ QUIC-подобный UDP-формат. Привязка к сессии исп�
   эту семантику нужно сохранять или явно менять вместе с тестами.
 - Для правок очереди и формата сверяйте `tests/unit/test_core.c`, а для
   взаимодействия сторон - `tests/integration/test_quictun.py`.
+- `QuicListen`, `QuicEndpoint`, `WgListen` и серверный `WgEndpoint`
+  требуют конкретного IP: `0.0.0.0` и `[::]` парсер отвергает, даже
+  для адреса прослушивания. В примерах `203.0.113.10` - условный адрес;
+  замените его на IP, назначенный интерфейсу сервера. Отдельные
+  отрицательные сценарии есть в `tests/integration/test_quictun.py`.
+- В обоих режимах обязательны `CertsPath` и `SNI`; повторный ключ или
+  повторная секция `[Interface]` вызывают ошибку конфигурации.
+  Сервер принимает не больше `MAX_PEERS_COUNT` (32) заполненных
+  записей peer; каждая требует `PeerCertSHA256` и `WgEndpoint`,
+  а повторяющиеся хеши сертификатов запрещены.
+- Тот же `MAX_PEERS_COUNT` (32) ограничивает **рабочие таблицы соединений**
+  `connects_client[]` и `connects_server[]`, а не только число `[Peer]`.
+  Если все клиентские слоты заняты, пакет от нового локального UDP-источника
+  учитывается как `recvfrom_wg_drop`; сервер при переполнении таблицы
+  не создаёт новую запись даже для готового QUIC-соединения.
+  При изменении предела и очистки соединений проверяйте обе стороны.
 
 ## Требования
 
@@ -184,7 +218,7 @@ DESTDIR="$(mktemp -d)" cmake --install build
 Форматирование исходников теперь явно запускается через `cmake --build build --target quictun-format`
 (при наличии clang-format); обычная сборка не изменяет исходные файлы.
 
-### CMake presets
+### Пресеты CMake
 
 В проекте есть presets:
 
@@ -289,7 +323,7 @@ QUICTun data plane отвечает за QUIC-like транспорт, masking, 
 counter и привязку к QUIC сессии.
 ```
 
-## Что НЕ делает текущий data plane
+## Что не делает плоскость данных
 
 Текущий data plane не надо описывать как:
 
@@ -309,7 +343,7 @@ ChaCha20-Poly1305
 
 больше не соответствует текущей lightweight data-plane модели.
 
-## Формат пакета для WireGuard payload
+## Формат UDP-пакета с данными WireGuard
 
 После установления QUIC-сессии полезная нагрузка WireGuard передаётся в компактном
 QUIC-подобном формате UDP-пакета.
@@ -355,7 +389,7 @@ Data header:
 
 Packet counter хранится в состоянии соединения и используется data-plane логикой отправки.
 
-## Как различаются обычный QUIC и tunnel data packets
+## Различение QUIC-пакетов и пакетов туннеля
 
 Один UDP-сокет принимает два типа трафика:
 
@@ -445,7 +479,7 @@ QuicListen
 
 ```ini
 [Interface]
-QuicListen = 0.0.0.0:443
+QuicListen = 203.0.113.10:443
 CertsPath = /etc/QUICTun/server
 LogPath = /var/log/QUICTun_log.txt
 StatPath = /var/log/QUICTun_stat.txt
@@ -477,22 +511,22 @@ Key = Value
 
 Пробелы по краям ключей и значений обрезаются.
 
-### Ключи Interface
+### Параметры Interface
 
 | Ключ | Режим | Значение |
 | -------------- | ------------- | ------------------------------------------------------------------------- |
 | `QuicListen` | server | Адрес `IP:PORT`, на котором сервер слушает QUIC/UDP. |
 | `QuicEndpoint` | client | Адрес `IP:PORT` QUICTun сервера. |
 | `WgListen` | client | Локальный UDP `IP:PORT`, который слушает клиент для трафика от WireGuard. |
-| `CertsPath` | client/server | Каталог с `cert.pem`, `cert.key`, `ca.pem`. |
+| `CertsPath` | client/server | Обязательный каталог с `cert.pem`, `cert.key`, `ca.pem`. |
 | `LogPath` | client/server | Файл runtime логов. |
 | `StatPath` | client/server | Файл статистики. |
-| `SNI` | client/server | SNI для QUIC/TLS handshake. |
+| `SNI` | client/server | Обязательное значение SNI для QUIC/TLS handshake. |
 
 Примеры:
 
 ```ini
-QuicListen = 0.0.0.0:443
+QuicListen = 203.0.113.10:443
 QuicEndpoint = 203.0.113.10:443
 WgListen = 127.0.0.1:60000
 CertsPath = /etc/QUICTun/client1
@@ -501,7 +535,7 @@ StatPath = /var/log/QUICTun_stat.txt
 SNI = example.com
 ```
 
-### Ключи Peer
+### Параметры Peer
 
 Секция `[Peer]` используется на сервере.
 
@@ -540,7 +574,7 @@ Cert verify failed: unknown cert_hash=<hash>
 
 ## Основные структуры состояния
 
-### Client entries
+### Состояние клиента
 
 На клиенте хранится таблица `connects_client[]`.
 
@@ -567,7 +601,7 @@ prefetch_mark
 used_mark
 ```
 
-### Server entries
+### Состояние сервера
 
 На сервере хранится таблица `connects_server[]`.
 
@@ -641,6 +675,12 @@ LATE_START = 1.1
 При запуске через systemd это попадает в journal.
 
 ### LogPath
+
+При запуске `LogPath` открывается в режиме `"w"`, поэтому предыдущий
+лог по указанному пути перезаписывается; это не append-only журнал.
+Если нужна история между перезапусками, используйте journal или внешнюю
+ротацию/сбор логов. `StatPath` также открывается на запись и затем
+обновляется периодически.
 
 В runtime log пишутся события вроде:
 
@@ -849,7 +889,7 @@ Loopback E2E проверяет QUIC и UDP непосредственно, то
 - Максимум активных peer/connection entries ограничен `MAX_PEERS_COUNT`.
 - Таблицы соединений реализованы как фиксированные массивы.
 - Поиск по таблицам линейный.
-- Для нового peer первый WireGuard packet может быть потерян, пока QUIC connection еще не готова.
+- Для нового peer первый WireGuard packet может быть потерян, пока QUIC connection ещё не готова.
 - Prefetch может создать короткий период, когда для одного peer существуют две записи.
 - Runtime log и statistics пишутся в файлы.
 - Собственный packet format проекта не является стандартным QUIC DATAGRAM API.
@@ -906,7 +946,7 @@ cmake --build --preset release
 
 QUICTun - это специализированный UDP туннель для WireGuard, где:
 
-- QUIC дает handshake, TLS аутентификацию, сертификаты, exporter-derived/session-derived secrets и session binding;
+- QUIC даёт handshake, TLS аутентификацию, сертификаты, exporter-derived/session-derived secrets и session binding;
 - WireGuard payload передаётся не через QUIC streams, а в собственном compact QUIC-like UDP data plane;
 - payload уже защищен WireGuard;
 - QUICTun data plane добавляет lightweight masking/obfuscation, compact wire id, short keyed tag, packet counter и fast demux;
